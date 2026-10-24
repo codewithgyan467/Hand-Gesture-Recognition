@@ -159,20 +159,52 @@ python run_gestureos.py --camera 0 --profile Media
 
 ---
 
-## 8. Verification & Test Suite
+## 8. StudyGuard: AI Meme Distraction & Hydration Monitor
 
-Run the full automated test suite (27 unit & integration tests):
+StudyGuard is an intelligent focus and hydration supervisor combining MediaPipe Object Detection and BlazeFace tracking with viral meme audio responses:
+
+| Detected Activity | Vision Pipeline | Triggered Meme Audio |
+| :--- | :--- | :--- |
+| **Book Closed / Put Down** | Tracks book reading state; triggers when closed/put away | `E:\Hand Gesture Recognition\meme audios\kyu-nahi-ho-rahi-padhai.mp3` |
+| **Phone Used After Book** | Detects cell phone usage following book closure | `E:\Hand Gesture Recognition\meme audios\abeyy-padhai-likhai-karo.mp3` |
+| **Drinking Water** | Detects bottle/cup raised to mouth/face region | `E:\Hand Gesture Recognition\meme audios\pani pani.mp3` |
+
+### Running StudyGuard
 ```powershell
-python -m pytest tests -v
+# Launch with live webcam
+python study_guard.py
+# or double-click START_STUDY_GUARD.bat
+
+# Launch in Simulation Mode (zero webcam required)
+python study_guard.py --simulation
+# or double-click START_STUDY_GUARD_SIMULATION.bat
 ```
-All 27 tests validate:
+
+**Interactive In-App Hotkeys:**
+- `[B]`: Simulate Book Reading
+- `[C]`: Simulate Book Closing (triggers "Kyu nahi ho rahi padhai")
+- `[P]`: Simulate Phone In Use (triggers "Abeyy padhai likhai karo")
+- `[W]`: Simulate Drinking Water (triggers "Pani pani")
+- `[M]`: Toggle Audio Mute
+- `[R]`: Reset Session Stats
+- `[Q]` / `[ESC]`: Quit
+
+---
+
+## 9. Verification & Test Suite
+
+Run the full automated test suite (64 unit & integration tests):
+```powershell
+python -m pytest GestureOS/tests -v
+```
+All 64 tests validate:
+- Book reading, closing, and temporal debounce
+- Distraction tracking and phone usage detection
+- Water drinking bottle/cup-to-mouth proximity
+- Native Windows MCI non-blocking meme audio playback
 - Landmark normalization invariance across distances and resolutions
-- Angle and feature vector calculations
 - Scale-invariant pinch hysteresis and drag timing
-- Static and dynamic gesture recognition
-- Temporal debounce and action cooldowns
 - Cursor One Euro, EMA, and Kalman filter jitter suppression
 - State machine transitions and emergency stop locking
 - Action dispatching and rate limiting
-- Config and profile persistence
-- Complete end-to-end simulation pipeline execution
+

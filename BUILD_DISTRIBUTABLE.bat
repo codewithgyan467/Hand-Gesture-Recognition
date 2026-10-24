@@ -33,12 +33,21 @@ echo [3/3] Copying runtime folders and assets into dist/GestureOS...
 if not exist "GestureOS\dist\GestureOS\models" mkdir "GestureOS\dist\GestureOS\models"
 copy /y "GestureOS\models\hand_landmarker.task" "GestureOS\dist\GestureOS\models\" >nul
 
+copy /y "GestureOS\models\*.tflite" "GestureOS\dist\GestureOS\models\" >nul
+
+if not exist "GestureOS\dist\GestureOS\meme audios" mkdir "GestureOS\dist\GestureOS\meme audios"
+copy /y "meme audios\*.mp3" "GestureOS\dist\GestureOS\meme audios\" >nul
+
 if not exist "GestureOS\dist\GestureOS\profiles" mkdir "GestureOS\dist\GestureOS\profiles"
 copy /y "GestureOS\profiles\*.json" "GestureOS\dist\GestureOS\profiles\" >nul
 
 copy /y "GestureOS\README.md" "GestureOS\dist\GestureOS\" >nul
 copy /y "START_GESTUREOS.bat" "GestureOS\dist\GestureOS\" >nul
 copy /y "START_SIMULATION_MODE.bat" "GestureOS\dist\GestureOS\" >nul
+copy /y "START_STUDY_GUARD.bat" "GestureOS\dist\GestureOS\" >nul
+copy /y "START_STUDY_GUARD_SIMULATION.bat" "GestureOS\dist\GestureOS\" >nul
+copy /y "study_guard.py" "GestureOS\dist\GestureOS\" >nul
+
 
 echo.
 echo ======================================================================

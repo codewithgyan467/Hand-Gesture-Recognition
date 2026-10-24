@@ -12,7 +12,9 @@ base_dir = os.path.abspath(os.path.dirname(__file__))
 
 datas = [
     (os.path.join(base_dir, 'models', 'hand_landmarker.task'), 'models'),
+    (os.path.join(base_dir, 'models', '*.tflite'), 'models'),
     (os.path.join(base_dir, 'profiles'), 'profiles'),
+    (os.path.abspath(os.path.join(base_dir, '..', 'meme audios')), 'meme audios'),
 ]
 
 # Hidden imports for dynamic modules
