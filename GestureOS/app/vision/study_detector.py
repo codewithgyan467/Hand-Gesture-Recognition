@@ -64,16 +64,26 @@ class StudyVisionDetector:
         self._init_models()
 
     def _resolve_model_path(self, target_path: str, filename: str) -> str:
-        """Finds model path across project subdirectories."""
+        """Finds model path across project subdirectories and ResourceManager."""
         if os.path.exists(target_path):
             return os.path.abspath(target_path)
+
+        try:
+            from app.core.resources import get_resource_manager
+            rm = get_resource_manager()
+            if "efficientdet" in filename:
+                cand = rm.get_object_model_path()
+            else:
+                cand = rm.get_face_model_path()
+            if cand.exists():
+                return str(cand)
+        except Exception:
+            pass
 
         candidates = [
             os.path.abspath(os.path.join(os.getcwd(), target_path)),
             os.path.abspath(os.path.join(os.getcwd(), "models", filename)),
-            os.path.abspath(os.path.join(os.getcwd(), "GestureOS", "models", filename)),
             os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models", filename)),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "models", filename)),
         ]
         for c in candidates:
             if os.path.exists(c):
@@ -218,3 +228,18 @@ class StudyVisionDetector:
                     result.drinking_confidence = result.container_score * 0.85
 
         return result
+
+    def close(self) -> None:
+        """Closes and releases MediaPipe detectors from memory."""
+        if self._obj_detector is not None:
+            try:
+                self._obj_detector.close()
+            except Exception:
+                pass
+            self._obj_detector = None
+        if self._face_detector is not None:
+            try:
+                self._face_detector.close()
+            except Exception:
+                pass
+            self._face_detector = None

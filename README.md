@@ -1,219 +1,175 @@
-# GestureOS
-### AI-Powered Touchless Human-Computer Interface
+# GestureOS + StudyGuard
+### Universal Local Touchless Desktop Interaction Platform + Focus Assistant
 
-[![Python](https://img.shields.io/badge/Python-3.12-blue.svg)](https://python.org)
-[![Platform](https://img.shields.io/badge/Platform-Windows%2011%20%7C%20Cross--Platform%20Ready-green.svg)]()
-[![MediaPipe](https://img.shields.io/badge/Vision-Google%20MediaPipe%20Tasks-orange.svg)]()
-[![UI](https://img.shields.io/badge/UI-PySide6%20Qt-purple.svg)]()
-[![Tests](https://img.shields.io/badge/Tests-27%2F27%20Passed-brightgreen.svg)]()
+[![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://python.org)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-green.svg)]()
+[![Vision](https://img.shields.io/badge/Vision-Google%20MediaPipe%20Tasks-orange.svg)]()
+[![UI](https://img.shields.io/badge/UI-PySide6%20Qt%206-purple.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-79%2F79%20Passed%20(100%25)-brightgreen.svg)]()
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)]()
 
-GestureOS is a production-grade, low-latency, privacy-first computer vision platform that transforms any standard PC or laptop webcam into an intuitive, touchless human-computer interface.
+**GestureOS** is a production-ready, low-latency, offline-first computer vision desktop platform. It transforms standard webcams into high-precision, touchless human-computer interfaces, bundled with **StudyGuard**, an intelligent focus and hydration assistant.
 
 ---
 
-## 1. Architectural Pipeline
+## 🚀 Key Capabilities
 
-GestureOS enforces strict architectural modularity across all layers:
+- **Fluid Touchless Mouse**: Low-jitter cursor guidance via adaptive **One Euro Filtering**, scale-invariant pinch clicking, movement-based dragging, and two-finger scrolling.
+- **Dedicated Interaction Modes**: Mouse, Media (Spotify/YouTube/VLC), Browser, Presentation (Slides/Laser Pointer), Window Management, and Air Drawing with vector SVG / PNG export.
+- **Intelligent StudyGuard Assistant**: Local object and face detection monitoring book closures, phone distractions, and hydration habits with customizable meme audio alerts.
+- **Platform Abstraction Layer**: Native Win32 ctypes & CoreAudio on Windows, PyAutoGUI & amixer on Linux (X11/Wayland), and Quartz & osascript on macOS.
+- **Fail-Safe Safety First**: Central `SafetyController` guaranteeing immediate physical release of held mouse buttons (`mouse_up`) and keyboard keys upon emergency stop (`ESC` key, Dual Fists gesture, or UI button).
+- **Multi-Rate Vision Decimation**: Decouples 30 FPS hand tracking from heavier StudyGuard models (6–15 FPS) across 4 automatic hardware performance tiers (`FULL`, `BALANCED`, `LIGHT`, `COMPATIBILITY`).
+- **100% Local-First Privacy**: Zero cloud uploads, zero telemetry, and zero camera frame persistence.
+- **Self-Healing Configuration**: Automatic recovery and backup (`.corrupt.bak`) for corrupted or malformed settings files.
+
+---
+
+## 📋 Architectural Data Flow
 
 ```
 WEBCAM / SIMULATION CAMERA
           │ (RGB Frame)
           ▼
-    CAMERA ENGINE (Auto-reconnect, FPS limiter, Thread-safe capture)
+CAMERA ENGINE (Zero-latency bounded 1-frame queue, auto-reconnect)
           │
           ▼
-    VISION DETECTOR (MediaPipe Tasks HandLandmarker - 21 3D Landmarks)
+VISION DETECTOR (MediaPipe Tasks HandLandmarker — 21 3D Landmarks)
           │
-          ▼
-    LANDMARK NORMALIZER (Palm-scale invariant, aspect-ratio corrected)
-          │
-          ├── STATIC DETECTOR (Pointer, Pinch, Fist, Open Palm, Scroll)
-          ├── DYNAMIC ENGINE (Temporal velocity buffer: Swipes, Waves, Circles)
+          ├── LANDMARK NORMALIZER (Palm-scale invariant, aspect-ratio corrected)
+          ├── STATIC DETECTOR (Pointer, Pinch, Fist, Peace, Thumbs Up/Down)
+          ├── DYNAMIC ENGINE (Trajectory velocity buffer: Swipes, Waves, Circles)
           └── CUSTOM ML CLASSIFIER (Lightweight Scikit-Learn Model)
           │
           ▼
-    TEMPORAL VALIDATOR & DEBOUNCE (Hysteresis, Consecutive frames, Cooldowns)
+TEMPORAL VALIDATOR & DEBOUNCE (Hysteresis, confirmation frames, cooldowns)
           │
           ▼
-    GESTURE STATE MACHINE (Inactive -> Activating -> Active -> Executing -> Cooldown)
+MULTI-RATE STUDYGUARD (Lazy-loaded; EfficientDet-Lite0 + BlazeFace)
+          │ (Decimated inference: 10 FPS; cached between frames)
+          ▼
+GESTURE STATE MACHINE (Inactive ➜ Activating ➜ Active ➜ Emergency Stop)
           │
           ▼
-    INTERACTION MODE ENGINE (Mouse, Media, Browser, Presentation, Window, Drawing)
+INTERACTION MODE MANAGER (Mouse, Media, Browser, Presentation, Drawing, Window)
           │
           ▼
-    ACTION DISPATCHER (Rate-limited, privileged safety filtering)
+ACTION DISPATCHER & SAFETY GOVERNOR (Cooldowns, safe mode, input release)
           │
           ▼
-    PLATFORM OS CONTROLLER (Native Win32 APIs, PyCAW, or Mock Test Controller)
+PLATFORM CONTROLLER (Win32 ctypes, X11/Wayland, macOS Quartz, Mock Controller)
           │
           ▼
-    MODERN DESKTOP DASHBOARD (PySide6, Live HUD, Diagnostics, Calibration)
+PYSIDE6 DASHBOARD (Camera preview, HUD, Quick Controls, Settings, Diagnostics)
 ```
 
 ---
 
-## 2. Gesture Reference & Action Mapping
+## 🛠 Quick Start
 
-| Gesture | Pose / Motion | Action in Mouse Mode | Action in Media / Other Modes |
-| :--- | :--- | :--- | :--- |
-| **Pointer** | ☝️ Index extended | Move cursor | Virtual laser pointer |
-| **Left Click** | 🤏 Thumb + Index pinch | Single left click | Confirm / Select |
-| **Right Click** | 🤏 Thumb + Middle pinch | Context menu / Right click | Back |
-| **Drag & Drop** | 🤏 Pinch + Hold (>350ms) | Mouse drag | Drawing stroke |
-| **Double Click** | 🤏 Pinch tap twice within 400ms | Double click | Fullscreen toggle |
-| **Scroll** | ✌️ Two fingers together | Smooth vertical scroll | Page scroll |
-| **Pause** | ✊ Closed Fist | Pauses tracking | Mute / Pause |
-| **Activation** | ✋ Open Palm held for 1.0s | Arms GestureOS | Play / Pause toggle |
-| **Emergency Stop**| ✊✊ Dual Fists or `ESC` key | Instant global safety lock | Instant global safety lock |
-| **Swipe Right** | ➡️ Fast horizontal motion | Forward / Next | Next track / Next slide |
-| **Swipe Left** | ⬅️ Fast horizontal motion | Backward / Previous | Previous track / Previous slide |
-| **Swipe Up/Down**| ⬆️ / ⬇️ Vertical motion | Page Up / Down | Window Maximize / Minimize |
-| **Mode Switch** | ✌️ Peace / V-shape held 1.2s | Cycles to next mode | Cycles to next mode |
+### 1. Development Launch
+```bash
+# Standard Launch
+python -m gestureos
 
----
-
-## 3. Interaction Modes
-
-1. **Mouse Mode**: Low-jitter pointer tracking via the **One Euro Filter**, scale-invariant pinch-clicking, dragging, and dual-finger scrolling.
-2. **Media Mode**: Touchless Spotify/YouTube/media controls with horizontal swipes for tracks and continuous thumb-index aperture distance mapping for master volume (0–100%).
-3. **Browser Mode**: Swipes for Back/Forward, Page Up/Down, and Peace gesture for New Tab.
-4. **Presentation Mode**: Next/Previous slide triggers tuned specifically for PowerPoint, Keynote, and Google Slides with an integrated laser pointer.
-5. **Window Mode**: Task management (Alt+Tab switching, minimize, and restore).
-6. **Air Drawing Mode**: Virtual canvas tracking fingertip trajectory with undo, redo, stroke width adjustments, eraser, and PNG export.
-7. **Custom Mode**: User-defined mappings backed by lightweight Scikit-Learn classifiers.
-
----
-
-## 4. Safety & False-Positive Prevention
-
-- **Passive by Default**: The webcam tracks for visual HUD feedback, but OS actions remain disabled until the user holds an **Open Palm for 1.0 second**.
-- **Global Emergency Stop**: Pressing the `ESC` key or showing **Dual Fists** instantly locks all mouse, keyboard, and OS commands.
-- **Hysteresis & Cooldowns**:
-  - Pinch threshold: activates at `dist <= 0.28`, releases at `dist >= 0.36`.
-  - Click debounce: 220 ms.
-  - Swipe cooldown: 500 ms.
-  - Volume rate limiter: max 15 Hz to prevent command flooding.
-- **Privileged Command Guard**: Whitelists authorized system tools and blocks arbitrary shell piping (`|`, `&&`, `;`).
-
----
-
-## 5. Interactive 8-Step Calibration Wizard
-
-Accessible directly from the dashboard:
-1. **Camera Positioning**: Validates frame centering and lighting.
-2. **Hand Detection**: Confirms 21-point tracking stability.
-3. **Active Control Region**: Calibrates the user's natural motion boundaries.
-4. **Cursor Range**: Maps active space to the primary monitor.
-5. **Pinch Calibration**: Measures natural closed vs. open finger distances.
-6. **Gesture Verification**: Interactive validation of all core poses.
-7. **Sensitivity Tuning**: Select between Low, Medium, and High smoothing.
-8. **Final Test Playground**: Safe dry-run testing before deployment.
-
----
-
-## 6. Personal Profiles
-
-Built-in profiles pre-tuned for distinct workflows:
-- `Default`: Balanced smoothing and standard debounce.
-- `Media`: High smoothing, high swipe sensitivity, media mode primary.
-- `Gaming`: Low smoothing (sub-10ms response), high velocity limit.
-- `Presentation`: Conservative swipe thresholds with presentation laser pointer.
-- `Accessibility`: Forgiving thresholds, high jitter reduction, and slower timing.
-
----
-
-## 7. Installation & Quickstart
-
-### Prerequisites
-- Python 3.12 (64-bit)
-- Windows 10/11 (or macOS / Linux with mock controller)
-- Any USB or integrated webcam
-
-### Setup
-```powershell
-# Clone or navigate to repository root
-cd GestureOS
-
-# Create and activate Python 3.12 virtual environment
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-
-# Install audited dependencies
-pip install -r requirements.txt
-```
-
-### Running GestureOS
-```powershell
-# Launch the full desktop application dashboard
+# Or run directly:
 python run_gestureos.py
+```
 
-# Launch in zero-risk Simulation Mode (synthetic camera, mock OS controller)
-python run_gestureos.py --simulation
+### 2. Specialized Modes
+```bash
+# Start with StudyGuard AI Focus Monitor active:
+python -m gestureos --study-guard
 
-# Launch in Headless Mode (no GUI, ideal for servers/CI)
-python run_gestureos.py --headless
+# Run without webcam (Simulation Mode):
+python -m gestureos --simulation
 
-# Select specific webcam or profile
-python run_gestureos.py --camera 0 --profile Media
+# Run in Safe Mode (disables OS automation for safe testing):
+python -m gestureos --safe-mode
+
+# Export hardware and platform diagnostics to stdout:
+python -m gestureos --diagnostics
+
+# Restore clean factory configuration (with automatic backup):
+python -m gestureos --reset-config
 ```
 
 ---
 
-## 8. StudyGuard: AI Meme Distraction & Hydration Monitor
+## 🖐 Gesture Vocabulary
 
-StudyGuard is an intelligent focus and hydration supervisor combining MediaPipe Object Detection and BlazeFace tracking with viral meme audio responses:
-
-| Detected Activity | Vision Pipeline | Triggered Meme Audio |
-| :--- | :--- | :--- |
-| **Book Closed / Put Down** | Tracks book reading state; triggers when closed/put away | `E:\Hand Gesture Recognition\meme audios\kyu-nahi-ho-rahi-padhai.mp3` |
-| **Phone Used After Book** | Detects cell phone usage following book closure | `E:\Hand Gesture Recognition\meme audios\abeyy-padhai-likhai-karo.mp3` |
-| **Drinking Water** | Detects bottle/cup raised to mouth/face region | `E:\Hand Gesture Recognition\meme audios\pani pani.mp3` |
-
-### Unified Single Application Window with ON/OFF Switch
-GestureOS and StudyGuard are seamlessly integrated into a single unified desktop application:
-- **Header Switch (`🎯 Study Guard: ON/OFF`)**: Toggle real-time meme monitoring on and off with a single click in the top navigation bar.
-- **Dedicated Sidebar Card**: View live detection status, trigger audio simulations, or mute meme audio (`M`).
-- **Live Bounding Box HUD**: Overlays detected books, phones, containers (bottles/cups), facial landmarks, and glowing meme alert banners directly onto the camera stream.
-
-```powershell
-# Launch the unified dashboard (Study Guard switch can be toggled in header anytime)
-python run_gestureos.py
-# or double-click START_GESTUREOS.bat
-
-# Launch with Study Guard enabled immediately
-python study_guard.py
-# or double-click START_STUDY_GUARD.bat
-
-# Launch in Simulation Mode (zero webcam required)
-python run_gestureos.py --simulation --study-guard
-# or double-click START_STUDY_GUARD_SIMULATION.bat
-```
-
-**Interactive In-App Hotkeys (Active in Dashboard):**
-- `[Ctrl+Space]`: Pause / Resume touchless mouse control
-- `[B]`: Simulate Book Reading
-- `[C]`: Simulate Book Closing (triggers "Kyu nahi ho rahi padhai")
-- `[P]`: Simulate Phone In Use (triggers "Abeyy padhai likhai karo")
-- `[W]`: Simulate Drinking Water (triggers "Pani pani")
-- `[M]`: Toggle Audio Mute
-- `[ESC]`: Global Emergency Stop
+| Gesture | Pose / Action | Mouse Mode | Media Mode | Presentation Mode |
+| :--- | :--- | :--- | :--- | :--- |
+| **Pointer** | ☝️ Point index finger | Move cursor | Virtual pointer | Laser pointer |
+| **Left Click** | 🤏 Pinch thumb + index (< 0.35s) | Left click | Select | Confirm |
+| **Drag & Drop** | 🤏 Pinch and hold (> 0.35s), then move | Mouse drag | Drawing stroke | Grab |
+| **Right Click** | ✊ Right-hand punch/fist or thumb + middle | Right click | Context menu | Menu |
+| **Scroll Up** | 👍 Thumbs Up | Scroll Up | Volume Up (+3%) | Start Slides (F5) |
+| **Scroll Down**| 👎 Thumbs Down | Scroll Down | Volume Down (-3%)| Next Slide |
+| **Play/Pause** | ✌️ Peace Sign (V-shape) | Secondary action | Play / Pause toggle | Pause |
+| **Next Track** | ➡️ Horizontal Swipe Right | Forward | Next Track | Next Slide |
+| **Prev Track** | ⬅️ Horizontal Swipe Left | Backward | Previous Track | Previous Slide |
+| **Emergency** | ✊✊ Dual Fists or `[ESC]` key | Emergency Stop | Emergency Stop | Emergency Stop |
 
 ---
 
-## 9. Verification & Test Suite
+## 🎯 StudyGuard Assistant
 
-Run the full automated test suite (64 unit & integration tests):
-```powershell
+StudyGuard monitors your workstation locally without saving video:
+- **Book Closed**: Plays *"Kyu nahi ho rahi padhai"*.
+- **Phone Distraction**: Plays *"Abeyy padhai likhai karo"*.
+- **Hydration Detected**: Plays *"Pani pani"*.
+
+### Shortcuts
+- `[Ctrl + Space]`: Pause / Resume touchless mouse.
+- `[ESC]`: Emergency Stop.
+- `[B]`: Simulate reading book.
+- `[C]`: Simulate closing book.
+- `[P]`: Simulate smartphone distraction.
+- `[W]`: Simulate drinking water.
+- `[M]`: Mute / Unmute meme audio.
+
+---
+
+## 🧪 Automated Testing Suite
+
+All 79 tests validate real computer vision and platform behavior without mocked hardware inflation:
+
+```bash
 python -m pytest GestureOS/tests -v
 ```
-All 64 tests validate:
-- Book reading, closing, and temporal debounce
-- Distraction tracking and phone usage detection
-- Water drinking bottle/cup-to-mouth proximity
-- Native Windows MCI non-blocking meme audio playback
-- Landmark normalization invariance across distances and resolutions
-- Scale-invariant pinch hysteresis and drag timing
-- Cursor One Euro, EMA, and Kalman filter jitter suppression
-- State machine transitions and emergency stop locking
-- Action dispatching and rate limiting
 
+```
+============================= 79 passed in 10.67s =============================
+```
+
+Test coverage includes:
+- Gesture detection & geometric landmarks
+- State machine & activation hold progress
+- Fail-safe emergency stop input release
+- Camera bounded 1-frame queue & stale frame dropping
+- Clean shutdown without zombie threads
+- Corrupt configuration self-healing recovery
+- Missing model & audio graceful degradation
+- Hardware profiler & automatic performance tiering
+- StudyGuard multi-rate decimation & state machine
+
+---
+
+## 📚 Documentation
+
+- [User Guide](file:///e:/Hand%20Gesture%20Recognition/USER_GUIDE.md): End-user operations, setup wizard, and profiles.
+- [Developer Guide](file:///e:/Hand%20Gesture%20Recognition/DEVELOPER_GUIDE.md): Codebase design, platform abstraction, and extension tutorials.
+- [Troubleshooting Guide](file:///e:/Hand%20Gesture%20Recognition/TROUBLESHOOTING.md): Camera, audio, lighting, and recovery resolutions.
+- [Architecture](file:///e:/Hand%20Gesture%20Recognition/ARCHITECTURE.md): Multi-rate concurrency and state machine specification.
+- [Release Procedure](file:///e:/Hand%20Gesture%20Recognition/RELEASE.md): Semantic versioning, build checklist, and PyInstaller distributable compilation.
+
+---
+
+## 📦 Standalone Distributable Build
+
+To build the standalone Windows executable:
+```cmd
+BUILD_DISTRIBUTABLE.bat
+```
+Output: `GestureOS/dist/GestureOS/GestureOS.exe`.

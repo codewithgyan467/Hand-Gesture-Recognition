@@ -34,16 +34,18 @@ from app.gestures.two_hand_engine import TwoHandCoordinator
 from app.gestures.ml_classifier import CustomMLGestureClassifier
 from app.safety.activation_guard import ActivationGuard
 from app.safety.emergency_stop import EmergencyStopGuard
+from app.safety.safety_controller import SafetyController
 from app.modes.mode_manager import ModeManager
 from app.actions.dispatcher import ActionDispatcher
 from app.platform.base_controller import BaseOSController
-from app.platform.windows_controller import WindowsOSController
-from app.platform.mock_controller import MockOSController
+from app.platform.factory import get_platform_controller
 from app.diagnostics.telemetry import TelemetryCollector, PerformanceSnapshot
 from app.diagnostics.logger import get_logger
 from app.vision.study_detector import StudyVisionDetector, StudyDetectionResult
 from app.vision.study_state_machine import StudyStateMachine, StudyState
 from app.vision.meme_audio_player import MemeAudioPlayer
+from app.vision.model_manager import ModelManager
+from app.core.performance import PerformanceController
 
 logger = get_logger("engine")
 
@@ -68,16 +70,18 @@ class PipelineFrameOutput:
 
 
 class GestureOSEngine:
-    """Core GestureOS real-time execution engine."""
+    """Core GestureOS real-time execution engine with adaptive multi-rate processing."""
 
     def __init__(
         self,
         config: Optional[GestureOSConfig] = None,
         use_mock_controller: bool = False,
         event_bus: Optional[EventBus] = None,
+        safe_mode: bool = False,
     ) -> None:
         self.config = config or GestureOSConfig()
         self.event_bus = event_bus or default_event_bus
+        self.safe_mode = safe_mode
 
         # Core State & Safety
         self.state_machine = GestureStateMachine(self.event_bus)
@@ -86,15 +90,30 @@ class GestureOSEngine:
             self.config.validation.activation_hold_sec,
             self.config.validation.allow_gesture_activation,
         )
-        self.emergency_guard = EmergencyStopGuard(self.state_machine)
 
         # Platform Controller
-        if use_mock_controller or self.config.camera.simulation_mode:
-            self.controller: BaseOSController = MockOSController(
-                self.config.cursor.screen_width, self.config.cursor.screen_height
-            )
-        else:
-            self.controller = WindowsOSController()
+        self.controller: BaseOSController = get_platform_controller(
+            use_mock=use_mock_controller or self.config.camera.simulation_mode,
+            screen_width=self.config.cursor.screen_width,
+            screen_height=self.config.cursor.screen_height,
+        )
+
+        # Central Safety Controller (Guarantees physical button & key release on emergency stop)
+        self.safety_controller = SafetyController(
+            controller=self.controller,
+            state_machine=self.state_machine,
+            event_bus=self.event_bus,
+        )
+        self.emergency_guard = EmergencyStopGuard(
+            self.state_machine, safety_controller=self.safety_controller
+        )
+
+        # Model Manager (Handles lazy loading & resource cleanup)
+        self.model_manager = ModelManager()
+
+        # Performance Controller (Dynamic multi-rate decimation & latency monitoring)
+        tier = getattr(self.config, "performance_tier", "BALANCED")
+        self.performance_controller = PerformanceController(tier=tier)
 
         # Telemetry
         self.telemetry = TelemetryCollector(event_bus=self.event_bus)
@@ -134,14 +153,23 @@ class GestureOSEngine:
             self.event_bus,
         )
         self.action_dispatcher = ActionDispatcher(
-            self.controller, self.state_machine, event_bus=self.event_bus
+            self.controller,
+            self.state_machine,
+            event_bus=self.event_bus,
+            safety_controller=self.safety_controller,
+            safe_mode=self.safe_mode,
         )
 
-        # StudyGuard AI Meme Detector
-        self.study_detector = StudyVisionDetector()
+        # StudyGuard AI Meme Detector (Lazy loaded — consumes zero ML memory when OFF)
+        self.enable_study_guard: bool = getattr(self.config, "enable_study_guard", False)
+        self.study_detector: Optional[StudyVisionDetector] = None
+        if self.enable_study_guard:
+            self.study_detector = self.model_manager.get_or_load_study_detector()
+
         self.study_audio_player = MemeAudioPlayer()
         self.study_state_machine = StudyStateMachine(audio_player=self.study_audio_player)
-        self.enable_study_guard: bool = getattr(self.config, "enable_study_guard", False)
+        self._cached_study_res: Optional[StudyDetectionResult] = None
+        self._last_foreground_check: float = 0.0
 
         # Threading
         self._is_running = False
@@ -151,11 +179,19 @@ class GestureOSEngine:
         self.latest_output: Optional[PipelineFrameOutput] = None
 
     def set_study_guard_enabled(self, enabled: bool) -> None:
-        """Toggles the StudyGuard meme detection pipeline on or off."""
+        """Toggles the StudyGuard meme detection pipeline on or off lazily."""
         self.enable_study_guard = enabled
         self.config.enable_study_guard = enabled
-        if not enabled:
+        if enabled:
+            if self.study_detector is None:
+                self.study_detector = self.model_manager.get_or_load_study_detector()
+        else:
             self.study_audio_player.stop()
+            self._cached_study_res = None
+            # Release model memory in lighter hardware tiers
+            if getattr(self.config, "performance_tier", "BALANCED") in ("LIGHT", "COMPATIBILITY"):
+                self.model_manager.unload_study_detector()
+                self.study_detector = None
         logger.info(f"Study Guard switched {'ON' if enabled else 'OFF'}")
 
 
@@ -211,7 +247,9 @@ class GestureOSEngine:
 
         self.camera.stop()
         self.emergency_guard.stop_keyboard_listener()
+        self.safety_controller.release_all_inputs()
         self.detector.close()
+        self.model_manager.close_all()
         self.study_audio_player.stop()
         logger.info("GestureOS engine shut down cleanly.")
 
@@ -235,6 +273,7 @@ class GestureOSEngine:
     def step(self, custom_frame: Optional[np.ndarray] = None) -> Optional[PipelineFrameOutput]:
         """Executes a single end-to-end iteration of the GestureOS pipeline."""
         t_frame_start = time.time()
+        self.performance_controller.on_frame_start()
 
         # 1. Camera Capture
         if custom_frame is not None:
@@ -394,18 +433,40 @@ class GestureOSEngine:
 
         snapshot = self.telemetry.get_snapshot()
 
-        # StudyGuard Inference & Meme Evaluation
+        # Optional Foreground Application Profile Switching
+        if getattr(self.config, "auto_switch_foreground_profiles", False):
+            if now - self._last_foreground_check > 2.0:
+                self._last_foreground_check = now
+                self._check_foreground_app_switch()
+
+        # StudyGuard Inference & Meme Evaluation (Adaptive Multi-Rate Decimation)
         study_res: Optional[StudyDetectionResult] = None
         study_st_str = "OFF"
         study_alert_str: Optional[str] = None
-        if self.enable_study_guard:
-            try:
-                study_res = self.study_detector.detect(frame)
-                st_enum = self.study_state_machine.update(study_res)
-                study_st_str = st_enum.value
-                study_alert_str = self.study_state_machine.recent_alert
-            except Exception as e:
-                logger.error(f"StudyGuard inference error: {e}")
+        if self.enable_study_guard and self.study_detector is not None:
+            if self.performance_controller.should_infer_study_guard():
+                try:
+                    t_st = time.time()
+                    study_res = self.study_detector.detect(frame)
+                    self._cached_study_res = study_res
+                    self.performance_controller.record_study_guard_inference(
+                        (time.time() - t_st) * 1000.0
+                    )
+                except Exception as e:
+                    logger.error(f"StudyGuard inference error: {e}")
+            else:
+                study_res = self._cached_study_res
+
+            if study_res is not None:
+                try:
+                    st_enum = self.study_state_machine.update(study_res)
+                    study_st_str = st_enum.value
+                    study_alert_str = self.study_state_machine.recent_alert
+                except Exception as e:
+                    logger.error(f"StudyGuard state machine error: {e}")
+
+        total_frame_latency = (time.time() - t_frame_start) * 1000.0
+        self.performance_controller.record_frame(total_frame_latency)
 
         # Render Debug Overlay
         active_region = self.config.active_region if self.config.show_debug_overlay else None
@@ -439,3 +500,24 @@ class GestureOSEngine:
             study_alert=study_alert_str,
             study_result=study_res,
         )
+
+    def _check_foreground_app_switch(self) -> None:
+        """Inspects foreground window title to switch interaction mode if enabled."""
+        try:
+            if not hasattr(self.controller, "get_foreground_window_title"):
+                return
+            title = self.controller.get_foreground_window_title().lower()
+            if not title:
+                return
+
+            if any(k in title for k in ("powerpoint", "slides", "keynote")):
+                if self.mode_manager.current_mode_type != InteractionMode.PRESENTATION:
+                    self.mode_manager.switch_mode(InteractionMode.PRESENTATION)
+            elif any(k in title for k in ("vlc", "spotify", "netflix", "youtube", "media player")):
+                if self.mode_manager.current_mode_type != InteractionMode.MEDIA:
+                    self.mode_manager.switch_mode(InteractionMode.MEDIA)
+            elif any(k in title for k in ("chrome", "firefox", "edge", "safari", "brave")):
+                if self.mode_manager.current_mode_type != InteractionMode.BROWSER:
+                    self.mode_manager.switch_mode(InteractionMode.BROWSER)
+        except Exception as e:
+            logger.debug(f"Foreground app switch check: {e}")

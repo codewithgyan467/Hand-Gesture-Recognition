@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 import time
-from typing import Optional
+from typing import Optional, Any
 from app.core.types import ActionIntent, IntentType
 from app.platform.base_controller import BaseOSController
 from app.core.state_machine import GestureStateMachine
@@ -22,14 +22,23 @@ class ActionDispatcher:
         state_machine: GestureStateMachine,
         cooldown_manager: Optional[ActionCooldownManager] = None,
         event_bus: Optional[EventBus] = None,
+        safety_controller: Optional[Any] = None,
+        safe_mode: bool = False,
     ) -> None:
         self.controller = controller
         self.state_machine = state_machine
         self.cooldown_manager = cooldown_manager or ActionCooldownManager()
         self.event_bus = event_bus or default_event_bus
+        self.safety_controller = safety_controller
+        self.safe_mode = safe_mode
 
         self._last_volume_time: float = 0.0
         self._min_volume_interval: float = 1.0 / 15.0  # Max 15 volume updates/sec
+
+    def set_safe_mode(self, enabled: bool) -> None:
+        """Toggles safe mode (blocks real OS mouse/keyboard actions)."""
+        self.safe_mode = enabled
+        logger.info(f"ActionDispatcher safe mode set to {enabled}")
 
     def dispatch(self, intent: ActionIntent) -> bool:
         """Validates safety, checks cooldowns, and executes action on platform controller."""
@@ -39,8 +48,15 @@ class ActionDispatcher:
         # Emergency stop intent can fire even if system is not in ACTIVE state
         if intent.intent_type == IntentType.EMERGENCY_STOP_TRIGGER:
             reason = intent.params.get("reason", "Emergency stop triggered")
-            self.state_machine.trigger_emergency_stop(reason)
+            if self.safety_controller is not None:
+                self.safety_controller.trigger_emergency_stop(reason)
+            else:
+                self.state_machine.trigger_emergency_stop(reason)
             return True
+
+        # In Safe Mode, block all real OS automation actions for safety
+        if self.safe_mode:
+            return False
 
         # All other intents require active state
         if not self.state_machine.is_active or self.state_machine.is_emergency_stopped:

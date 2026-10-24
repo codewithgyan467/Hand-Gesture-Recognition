@@ -87,15 +87,85 @@ class DiagnosticsPanel(QWidget):
 
         layout.addWidget(count_group)
 
-        # Reset button
+        # Action Buttons
+        btn_bar = QHBoxLayout()
+        btn_bar.setSpacing(10)
+
         btn_reset = QPushButton("Reset Statistics")
         btn_reset.setStyleSheet(
             "QPushButton { background-color: #343a40; color: #ffffff; border: 1px solid #495057; padding: 7px 16px; border-radius: 6px; font-weight: 500; }"
             "QPushButton:hover { background-color: #3d434a; }"
         )
         btn_reset.clicked.connect(self.telemetry.reset_statistics)
-        layout.addWidget(btn_reset)
+        btn_bar.addWidget(btn_reset)
+
+        btn_export = QPushButton("📥 Export Diagnostic Report")
+        btn_export.setStyleSheet(
+            "QPushButton { background-color: #0d6efd; color: #ffffff; border: 1px solid #0d6efd; padding: 7px 16px; border-radius: 6px; font-weight: 500; }"
+            "QPushButton:hover { background-color: #0b5ed7; }"
+        )
+        btn_export.clicked.connect(self.export_diagnostic_report)
+        btn_bar.addWidget(btn_export)
+
+        layout.addLayout(btn_bar)
         layout.addStretch()
+
+    def export_diagnostic_report(self) -> str:
+        """Generates and writes a comprehensive local diagnostic JSON report (privacy-safe, no images)."""
+        import sys
+        import time
+        import json
+        from PySide6.QtWidgets import QMessageBox
+        from app.core.resources import ResourceManager
+        from app.platform.capabilities import PlatformCapabilities
+        from app.diagnostics.hardware import HardwareProfiler
+
+        snap = self.telemetry.get_snapshot()
+        caps = PlatformCapabilities.detect()
+        hw = HardwareProfiler.detect()
+
+        report = {
+            "version": "1.0.0",
+            "timestamp": time.time(),
+            "runtime": {
+                "python": sys.version,
+                "executable": sys.executable,
+                "platform": sys.platform,
+            },
+            "platform_capabilities": caps.to_dict(),
+            "hardware": hw.to_dict(),
+            "models_ready": ResourceManager.validate_models(),
+            "audio_assets_ready": ResourceManager.validate_audio_assets(),
+            "performance_summary": {
+                "fps": snap.fps,
+                "total_latency_ms": snap.total_latency_ms,
+                "camera_latency_ms": snap.camera_latency_ms,
+                "vision_latency_ms": snap.vision_latency_ms,
+                "gesture_latency_ms": snap.gesture_latency_ms,
+                "cpu_percent": snap.cpu_percent,
+                "ram_mb": snap.ram_mb,
+                "uptime_sec": snap.uptime_sec,
+                "total_gestures": snap.total_gestures,
+                "false_positives_filtered": snap.false_positives_filtered,
+                "actions_dispatched": snap.actions_dispatched,
+            },
+            "privacy_note": "No camera frames, audio samples, or private user files are included in diagnostics."
+        }
+
+        logs_dir = ResourceManager.get_logs_dir()
+        report_path = logs_dir / f"diagnostic_report_{int(time.time())}.json"
+        try:
+            with open(report_path, "w", encoding="utf-8") as f:
+                json.dump(report, f, indent=2)
+            QMessageBox.information(
+                self,
+                "Diagnostic Report Exported",
+                f"Diagnostic report safely saved to:\n\n{report_path}\n\n(No images or private data included)"
+            )
+            return str(report_path)
+        except Exception as e:
+            QMessageBox.warning(self, "Export Failed", f"Could not write diagnostic report: {e}")
+            return ""
 
     def _create_metric_label(self, default_text: str) -> QLabel:
         lbl = QLabel(default_text)

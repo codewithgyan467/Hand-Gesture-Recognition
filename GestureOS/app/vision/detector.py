@@ -43,15 +43,19 @@ class HandDetector:
         if os.path.exists(path):
             return os.path.abspath(path)
 
-        # 1. Relative to this module's package (GestureOS/models/...)
+        # Delegate to unified ResourceManager
+        try:
+            from app.core.resources import get_resource_manager
+            rm_model = get_resource_manager().get_hand_model_path()
+            if rm_model.exists():
+                return str(rm_model)
+        except Exception:
+            pass
+
+        # Relative to module's package
         pkg_model = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", path))
         if os.path.exists(pkg_model):
             return pkg_model
-
-        # 2. Inside GestureOS relative to current working directory
-        cwd_model = os.path.abspath(os.path.join(os.getcwd(), "GestureOS", path))
-        if os.path.exists(cwd_model):
-            return cwd_model
 
         return path
 

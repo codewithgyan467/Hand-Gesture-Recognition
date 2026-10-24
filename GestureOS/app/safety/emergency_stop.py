@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 import threading
-from typing import Optional, Callable
+from typing import Optional, Callable, Any
 from pynput import keyboard
 from app.core.state_machine import GestureStateMachine
 from app.diagnostics.logger import get_logger
@@ -13,8 +13,9 @@ logger = get_logger("emergency_stop")
 class EmergencyStopGuard:
     """Monitors global safety kill-switches (ESC key, dual fists, UI button) to instantly lock GestureOS."""
 
-    def __init__(self, state_machine: GestureStateMachine) -> None:
+    def __init__(self, state_machine: GestureStateMachine, safety_controller: Optional[Any] = None) -> None:
         self.state_machine = state_machine
+        self.safety_controller = safety_controller
         self._listener: Optional[keyboard.Listener] = None
         self._is_running = False
 
@@ -35,10 +36,10 @@ class EmergencyStopGuard:
 
                     if self.state_machine.is_emergency_stopped:
                         logger.info("Global ESC key pressed: Clearing Emergency Stop and re-arming Touchless Control.")
-                        self.state_machine.clear_emergency_stop(activate=True)
+                        self.reset()
                     else:
                         logger.warning("Global ESC key pressed: Engaging Emergency Safety Stop.")
-                        self.state_machine.trigger_emergency_stop("Global ESC key pressed")
+                        self.trigger("Global ESC key pressed")
             except Exception as e:
                 logger.error(f"Error in emergency keyboard hook: {e}")
 
@@ -62,8 +63,14 @@ class EmergencyStopGuard:
 
     def trigger(self, reason: str = "Manual emergency stop") -> None:
         logger.warning(f"Emergency stop triggered: {reason}")
-        self.state_machine.trigger_emergency_stop(reason)
+        if self.safety_controller is not None:
+            self.safety_controller.trigger_emergency_stop(reason)
+        else:
+            self.state_machine.trigger_emergency_stop(reason)
 
     def reset(self) -> None:
         logger.info("Emergency stop cleared by user.")
-        self.state_machine.clear_emergency_stop(activate=True)
+        if self.safety_controller is not None:
+            self.safety_controller.clear_emergency_stop(activate=True)
+        else:
+            self.state_machine.clear_emergency_stop(activate=True)

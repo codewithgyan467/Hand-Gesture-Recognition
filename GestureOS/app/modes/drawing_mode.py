@@ -173,5 +173,32 @@ class DrawingMode(BaseMode):
         canvas = self.render_canvas()
         return cv2.imwrite(output_path, canvas)
 
+    def export_svg(self, output_path: str) -> bool:
+        """Exports all strokes as vector SVG paths."""
+        try:
+            svg_lines = [
+                f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {self.canvas_width} {self.canvas_height}" width="{self.canvas_width}" height="{self.canvas_height}">',
+                '<rect width="100%" height="100%" fill="#1a1d20"/>',
+            ]
+            for stroke in self.strokes:
+                if not stroke.points:
+                    continue
+                b, g, r = stroke.color
+                hex_color = f"#{r:02x}{g:02x}{b:02x}" if not stroke.is_eraser else "#1a1d20"
+                if len(stroke.points) == 1:
+                    px, py = stroke.points[0]
+                    svg_lines.append(f'<circle cx="{px}" cy="{py}" r="{max(1, stroke.width // 2)}" fill="{hex_color}"/>')
+                else:
+                    path_d = f"M {stroke.points[0][0]} {stroke.points[0][1]} "
+                    for pt in stroke.points[1:]:
+                        path_d += f"L {pt[0]} {pt[1]} "
+                    svg_lines.append(f'<path d="{path_d}" stroke="{hex_color}" stroke-width="{stroke.width}" stroke-linecap="round" stroke-linejoin="round" fill="none"/>')
+            svg_lines.append('</svg>')
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(svg_lines))
+            return True
+        except Exception:
+            return False
+
     def on_exit(self) -> None:
         self._finish_stroke()

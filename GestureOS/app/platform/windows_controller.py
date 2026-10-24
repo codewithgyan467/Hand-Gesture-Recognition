@@ -29,6 +29,9 @@ class WindowsOSController(BaseOSController):
     """Production Windows OS automation controller."""
 
     def __init__(self) -> None:
+        import sys
+        if sys.platform != "win32":
+            raise RuntimeError("WindowsOSController requires Windows (win32). Use get_platform_controller().")
         self._user32 = ctypes.windll.user32
         try:
             self._user32.SetProcessDPIAware()

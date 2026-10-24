@@ -19,6 +19,17 @@ class MockOSController(BaseOSController):
         self.mouse_buttons_held = set()
         self.action_history: List[Dict[str, Any]] = []
 
+    @property
+    def is_left_down(self) -> bool:
+        return "left" in self.mouse_buttons_held
+
+    @property
+    def last_click(self) -> Optional[Dict[str, Any]]:
+        for act in reversed(self.action_history):
+            if "click" in act["action"]:
+                return act
+        return None
+
     def _record(self, action: str, **kwargs: Any) -> None:
         self.action_history.append({
             "action": action,

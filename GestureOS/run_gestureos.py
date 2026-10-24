@@ -55,6 +55,21 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Start with Study Guard AI Meme Distraction & Hydration Monitor turned ON",
     )
+    parser.add_argument(
+        "--safe-mode",
+        action="store_true",
+        help="Run in Safe Mode (disables OS automation, allows configuration and diagnostics safely)",
+    )
+    parser.add_argument(
+        "--diagnostics",
+        action="store_true",
+        help="Export diagnostic report and print hardware/platform summary to stdout",
+    )
+    parser.add_argument(
+        "--reset-config",
+        action="store_true",
+        help="Reset user configuration to clean defaults with automatic backup of corrupt/old settings",
+    )
     return parser.parse_args()
 
 
@@ -66,6 +81,43 @@ def main() -> int:
     setup_logger(log_level=log_level)
     logger = get_logger("main")
     logger.info("Initializing GestureOS platform...")
+
+    # Handle --reset-config
+    if args.reset_config:
+        from app.core.resources import ResourceManager
+        cfg_file = ResourceManager.get_config_dir() / "config.json"
+        if cfg_file.exists():
+            backup_file = ResourceManager.get_config_dir() / f"config.backup.{int(time.time())}.json"
+            cfg_file.rename(backup_file)
+            logger.info(f"Existing config backed up to: {backup_file}")
+        clean_cfg = GestureOSConfig()
+        clean_cfg.save_to_file(str(cfg_file))
+        logger.info("Clean default configuration restored successfully.")
+        print(f"GestureOS configuration successfully reset. Backup saved to: {backup_file if 'backup_file' in locals() else 'None'}")
+        return 0
+
+    # Handle --diagnostics
+    if args.diagnostics:
+        from app.diagnostics.hardware import HardwareProfiler
+        from app.platform.capabilities import PlatformCapabilities
+        from app.core.resources import ResourceManager
+        import json
+
+        hw = HardwareProfiler.detect()
+        caps = PlatformCapabilities.detect()
+        models = ResourceManager.validate_models()
+        audios = ResourceManager.validate_audio_assets()
+
+        diag_summary = {
+            "version": "1.0.0",
+            "platform": caps.to_dict(),
+            "hardware": hw.to_dict(),
+            "models": models,
+            "audio_assets": audios,
+        }
+        print("=== GESTUREOS DIAGNOSTIC REPORT ===")
+        print(json.dumps(diag_summary, indent=2))
+        return 0
 
     # Load profile
     profile_mgr = ProfileManager()
@@ -80,8 +132,12 @@ def main() -> int:
         config.camera.simulation_mode = True
         logger.info("Simulation Mode enabled via command line flag.")
 
-    # Initialize Master Engine
-    engine = GestureOSEngine(config=config, use_mock_controller=args.simulation)
+    # Initialize Master Engine with safe_mode support
+    engine = GestureOSEngine(
+        config=config,
+        use_mock_controller=args.simulation or args.safe_mode,
+        safe_mode=args.safe_mode,
+    )
 
     if args.headless:
         logger.info("Starting GestureOS in HEADLESS mode (Ctrl+C to stop)...")

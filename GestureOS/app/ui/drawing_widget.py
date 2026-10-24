@@ -47,10 +47,14 @@ class DrawingWidget(QWidget):
         btn_clear.clicked.connect(self._on_clear)
         toolbar.addWidget(btn_clear)
 
+        self.btn_tool = QPushButton("Tool: Pen")
+        self.btn_tool.clicked.connect(self._on_toggle_tool)
+        toolbar.addWidget(self.btn_tool)
+
         toolbar.addSpacing(15)
 
         # Width selector
-        toolbar.addWidget(QLabel("Brush Width:"))
+        toolbar.addWidget(QLabel("Width:"))
         self.spin_width = QSpinBox()
         self.spin_width.setRange(1, 30)
         self.spin_width.setValue(self.drawing_mode.brush_width)
@@ -59,14 +63,22 @@ class DrawingWidget(QWidget):
 
         toolbar.addSpacing(15)
 
-        # Export button
-        btn_export = QPushButton("Export Canvas (PNG)")
+        # Export buttons
+        btn_export = QPushButton("Save PNG")
         btn_export.setStyleSheet(
-            "QPushButton { background-color: #0d6efd; color: #ffffff; border: 1px solid #0d6efd; padding: 6px 14px; font-weight: 500; border-radius: 6px; }"
+            "QPushButton { background-color: #0d6efd; color: #ffffff; border: 1px solid #0d6efd; padding: 6px 12px; font-weight: 500; border-radius: 6px; }"
             "QPushButton:hover { background-color: #0b5ed7; }"
         )
         btn_export.clicked.connect(self._on_export)
         toolbar.addWidget(btn_export)
+
+        btn_export_svg = QPushButton("Save SVG")
+        btn_export_svg.setStyleSheet(
+            "QPushButton { background-color: #198754; color: #ffffff; border: 1px solid #198754; padding: 6px 12px; font-weight: 500; border-radius: 6px; }"
+            "QPushButton:hover { background-color: #157347; }"
+        )
+        btn_export_svg.clicked.connect(self._on_export_svg)
+        toolbar.addWidget(btn_export_svg)
 
         toolbar.addStretch()
         layout.addLayout(toolbar)
@@ -101,6 +113,10 @@ class DrawingWidget(QWidget):
     def _on_width_changed(self, val: int) -> None:
         self.drawing_mode.brush_width = val
 
+    def _on_toggle_tool(self) -> None:
+        self.drawing_mode.is_eraser = not self.drawing_mode.is_eraser
+        self.btn_tool.setText("Tool: Eraser" if self.drawing_mode.is_eraser else "Tool: Pen")
+
     def _on_export(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Export Canvas", "gestureos_drawing.png", "Images (*.png *.jpg)")
         if path:
@@ -109,6 +125,15 @@ class DrawingWidget(QWidget):
                 QMessageBox.information(self, "Export Successful", f"Saved canvas to:\n{path}")
             else:
                 QMessageBox.critical(self, "Export Failed", "Could not save canvas image.")
+
+    def _on_export_svg(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "Export Vector SVG", "gestureos_drawing.svg", "Vector Graphics (*.svg)")
+        if path:
+            ok = self.drawing_mode.export_svg(path)
+            if ok:
+                QMessageBox.information(self, "SVG Export Successful", f"Saved vector drawing to:\n{path}")
+            else:
+                QMessageBox.critical(self, "Export Failed", "Could not save SVG file.")
 
     def update_canvas_display(self) -> None:
         canvas_bgr = self.drawing_mode.render_canvas()

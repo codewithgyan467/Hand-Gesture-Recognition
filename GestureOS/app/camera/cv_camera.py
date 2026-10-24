@@ -1,11 +1,12 @@
-"""OpenCV-based physical webcam implementation with hotplug/disconnect auto-recovery."""
+"""OpenCV-based physical webcam implementation with hotplug/disconnect auto-recovery and zero-latency bounded buffer."""
 
 from __future__ import annotations
 import cv2
+import sys
 import time
 import threading
 import numpy as np
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict
 from app.camera.base import BaseCamera
 from app.core.events import EventBus, EventType, default_event_bus
 from app.diagnostics.logger import get_logger
@@ -13,21 +14,35 @@ from app.diagnostics.logger import get_logger
 logger = get_logger("camera")
 
 
-def discover_cameras(max_to_test: int = 4) -> List[int]:
-    """Probes video capture indices to discover physically connected cameras."""
-    available: List[int] = []
+def discover_cameras(max_to_test: int = 6) -> List[Dict[str, Any]]:
+    """Probes video capture indices to discover physically connected cameras and their capabilities."""
+    available: List[Dict[str, Any]] = []
+    backend = cv2.CAP_DSHOW if sys.platform == "win32" else cv2.CAP_ANY
+
     for idx in range(max_to_test):
-        cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
-        if cap.isOpened():
-            ret, _ = cap.read()
-            if ret:
-                available.append(idx)
-            cap.release()
+        try:
+            cap = cv2.VideoCapture(idx, backend)
+            if cap.isOpened():
+                ret, frame = cap.read()
+                if ret and frame is not None:
+                    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    fps = int(cap.get(cv2.CAP_PROP_FPS)) or 30
+                    available.append({
+                        "index": idx,
+                        "name": f"Camera {idx} ({w}x{h} @ {fps}fps)",
+                        "width": w,
+                        "height": h,
+                        "fps": fps,
+                    })
+                cap.release()
+        except Exception:
+            pass
     return available
 
 
 class OpenCVCamera(BaseCamera):
-    """Production OpenCV camera driver with automatic reconnection and frame-drop tolerance."""
+    """Production OpenCV camera driver with dedicated capture thread, bounded 1-frame queue, and auto-reconnection."""
 
     def __init__(
         self,
@@ -56,8 +71,18 @@ class OpenCVCamera(BaseCamera):
         self._max_consecutive_failures = 5
         self._is_disconnected = False
 
+        # Zero-latency bounded buffer (latest frame only)
+        self._latest_frame: Optional[np.ndarray] = None
+        self._latest_timestamp: float = 0.0
+        self._new_frame_event = threading.Event()
+
+        self._capture_thread: Optional[threading.Thread] = None
         self._reconnect_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
+
+    @property
+    def is_bounded(self) -> bool:
+        return True
 
     def start(self) -> bool:
         with self._lock:
@@ -76,6 +101,8 @@ class OpenCVCamera(BaseCamera):
                 return False
 
             self._is_disconnected = False
+            self._start_capture_worker()
+
             self._event_bus.publish(EventType.CAMERA_STATUS_CHANGED, {
                 "status": "connected",
                 "camera_index": self.camera_index,
@@ -89,14 +116,16 @@ class OpenCVCamera(BaseCamera):
             except Exception:
                 pass
 
-        # Try DirectShow first on Windows for faster initialization, fallback to default
-        cap = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW)
-        if not cap.isOpened():
+        # Use DirectShow on Windows for fast enumeration, default on others
+        backend = cv2.CAP_DSHOW if sys.platform == "win32" else cv2.CAP_ANY
+        cap = cv2.VideoCapture(self.camera_index, backend)
+        if not cap.isOpened() and backend != cv2.CAP_ANY:
             cap = cv2.VideoCapture(self.camera_index)
 
         if not cap.isOpened():
             return False
 
+        # Resolution & FPS negotiation
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.target_width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.target_height)
         cap.set(cv2.CAP_PROP_FPS, self.target_fps)
@@ -104,41 +133,70 @@ class OpenCVCamera(BaseCamera):
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         except Exception:
             pass
+
         self._cap = cap
         self._consecutive_failures = 0
         return True
 
+    def _start_capture_worker(self) -> None:
+        if self._capture_thread and self._capture_thread.is_alive():
+            return
+        self._capture_thread = threading.Thread(
+            target=self._capture_loop, daemon=True, name="CameraCaptureWorker"
+        )
+        self._capture_thread.start()
+
+    def _capture_loop(self) -> None:
+        """Dedicated high-priority capture thread continuously draining hardware frames."""
+        while not self._stop_event.is_set() and self._is_running:
+            if self._is_disconnected or self._cap is None:
+                time.sleep(0.05)
+                continue
+
+            ret, frame = self._cap.read()
+            if not ret or frame is None or frame.size == 0:
+                self._handle_read_failure()
+                time.sleep(0.02)
+                continue
+
+            self._consecutive_failures = 0
+            if self.mirror:
+                frame = cv2.flip(frame, 1)
+
+            # Store in bounded 1-frame buffer, instantly overwriting old frame
+            with self._lock:
+                self._latest_frame = frame
+                self._latest_timestamp = time.time()
+                self._new_frame_event.set()
+
     def stop(self) -> None:
         self._stop_event.set()
+        self._is_running = False
+
+        if self._capture_thread and self._capture_thread.is_alive():
+            self._capture_thread.join(timeout=1.0)
+            self._capture_thread = None
+
         with self._lock:
-            self._is_running = False
             if self._cap is not None:
                 try:
                     self._cap.release()
                 except Exception:
                     pass
                 self._cap = None
+            self._latest_frame = None
+
         logger.info("Camera capture stopped.")
 
     def read_frame(self) -> Tuple[bool, Optional[np.ndarray]]:
+        """Retrieves the newest captured camera frame without queue lag."""
         if not self._is_running or self._is_disconnected:
             return (False, None)
 
         with self._lock:
-            if self._cap is None or not self._cap.isOpened():
-                self._handle_read_failure()
-                return (False, None)
-
-            ret, frame = self._cap.read()
-            if not ret or frame is None or frame.size == 0:
-                self._handle_read_failure()
-                return (False, None)
-
-            self._consecutive_failures = 0
-            if self.mirror:
-                frame = cv2.flip(frame, 1)
-
-            return (True, frame)
+            if self._latest_frame is not None:
+                return (True, self._latest_frame.copy())
+            return (False, None)
 
     def _handle_read_failure(self) -> None:
         self._consecutive_failures += 1
@@ -173,6 +231,7 @@ class OpenCVCamera(BaseCamera):
                         "status": "reconnected",
                         "camera_index": self.camera_index,
                     })
+                    self._start_capture_worker()
                     break
 
     def is_opened(self) -> bool:
@@ -206,4 +265,4 @@ class OpenCVCamera(BaseCamera):
         return False
 
     def get_camera_name(self) -> str:
-        return f"OpenCV Camera (Index {self.camera_index})"
+        return f"Camera {self.camera_index} (OpenCV Backend)"

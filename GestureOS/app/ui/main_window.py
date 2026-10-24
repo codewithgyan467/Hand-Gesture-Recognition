@@ -557,6 +557,10 @@ class GestureOSMainWindow(QMainWindow):
         btn_diag.clicked.connect(self.open_diagnostics)
         footer.addWidget(btn_diag)
 
+        btn_settings = QPushButton("⚙ Settings")
+        btn_settings.clicked.connect(self.open_settings)
+        footer.addWidget(btn_settings)
+
         main_layout.addLayout(footer)
 
     def _init_system_tray(self) -> None:
@@ -947,8 +951,8 @@ class GestureOSMainWindow(QMainWindow):
         self.engine.start()
 
     def open_onboarding_wizard(self) -> None:
-        from app.ui.onboarding_wizard import OnboardingWizardDialog
-        dlg = OnboardingWizardDialog(self.engine, self)
+        from app.ui.setup_wizard import SetupWizardDialog
+        dlg = SetupWizardDialog(self.engine, self)
         dlg.exec()
 
     def open_calibration_wizard(self) -> None:
@@ -994,11 +998,14 @@ class GestureOSMainWindow(QMainWindow):
 
         diag_timer = QTimer(dlg)
         def _tick():
-            out = self.engine.latest_output
-            if out and out.telemetry:
-                panel.update_metrics(out.telemetry)
+            panel.update_metrics(self.engine.telemetry.get_snapshot())
         diag_timer.timeout.connect(_tick)
         diag_timer.start(100)
+        dlg.exec()
+
+    def open_settings(self) -> None:
+        from app.ui.settings_dialog import SettingsDialog
+        dlg = SettingsDialog(self.engine, self)
         dlg.exec()
 
     def closeEvent(self, event) -> None:
