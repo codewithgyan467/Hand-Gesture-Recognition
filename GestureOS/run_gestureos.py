@@ -49,6 +49,12 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Enable verbose DEBUG logging",
     )
+    parser.add_argument(
+        "--study-guard",
+        "--study",
+        action="store_true",
+        help="Start with Study Guard AI Meme Distraction & Hydration Monitor turned ON",
+    )
     return parser.parse_args()
 
 
@@ -65,6 +71,10 @@ def main() -> int:
     profile_mgr = ProfileManager()
     config = profile_mgr.load_profile(args.profile)
     config.camera.camera_index = args.camera
+
+    if args.study_guard:
+        config.enable_study_guard = True
+        logger.info("Study Guard enabled via command line flag.")
 
     if args.simulation:
         config.camera.simulation_mode = True

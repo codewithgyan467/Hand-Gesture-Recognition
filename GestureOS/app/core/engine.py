@@ -41,6 +41,9 @@ from app.platform.windows_controller import WindowsOSController
 from app.platform.mock_controller import MockOSController
 from app.diagnostics.telemetry import TelemetryCollector, PerformanceSnapshot
 from app.diagnostics.logger import get_logger
+from app.vision.study_detector import StudyVisionDetector, StudyDetectionResult
+from app.vision.study_state_machine import StudyStateMachine, StudyState
+from app.vision.meme_audio_player import MemeAudioPlayer
 
 logger = get_logger("engine")
 
@@ -57,6 +60,11 @@ class PipelineFrameOutput:
     mode: str
     fps: float
     dispatched_intent: Optional[ActionIntent] = None
+    study_active: bool = False
+    study_state: str = "OFF"
+    study_alert: Optional[str] = None
+    study_result: Optional[StudyDetectionResult] = None
+
 
 
 class GestureOSEngine:
@@ -129,12 +137,27 @@ class GestureOSEngine:
             self.controller, self.state_machine, event_bus=self.event_bus
         )
 
+        # StudyGuard AI Meme Detector
+        self.study_detector = StudyVisionDetector()
+        self.study_audio_player = MemeAudioPlayer()
+        self.study_state_machine = StudyStateMachine(audio_player=self.study_audio_player)
+        self.enable_study_guard: bool = getattr(self.config, "enable_study_guard", False)
+
         # Threading
         self._is_running = False
         self._worker_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
         self.latest_output: Optional[PipelineFrameOutput] = None
+
+    def set_study_guard_enabled(self, enabled: bool) -> None:
+        """Toggles the StudyGuard meme detection pipeline on or off."""
+        self.enable_study_guard = enabled
+        self.config.enable_study_guard = enabled
+        if not enabled:
+            self.study_audio_player.stop()
+        logger.info(f"Study Guard switched {'ON' if enabled else 'OFF'}")
+
 
     def _init_camera(self) -> None:
         if self.config.camera.simulation_mode:
@@ -189,6 +212,7 @@ class GestureOSEngine:
         self.camera.stop()
         self.emergency_guard.stop_keyboard_listener()
         self.detector.close()
+        self.study_audio_player.stop()
         logger.info("GestureOS engine shut down cleanly.")
 
     def _pipeline_worker(self) -> None:
@@ -370,6 +394,19 @@ class GestureOSEngine:
 
         snapshot = self.telemetry.get_snapshot()
 
+        # StudyGuard Inference & Meme Evaluation
+        study_res: Optional[StudyDetectionResult] = None
+        study_st_str = "OFF"
+        study_alert_str: Optional[str] = None
+        if self.enable_study_guard:
+            try:
+                study_res = self.study_detector.detect(frame)
+                st_enum = self.study_state_machine.update(study_res)
+                study_st_str = st_enum.value
+                study_alert_str = self.study_state_machine.recent_alert
+            except Exception as e:
+                logger.error(f"StudyGuard inference error: {e}")
+
         # Render Debug Overlay
         active_region = self.config.active_region if self.config.show_debug_overlay else None
         annotated = self.visualizer.render_overlay(
@@ -382,6 +419,8 @@ class GestureOSEngine:
             mode=self.mode_manager.current_mode_name,
             active_region=active_region,
             draw_landmarks=self.config.show_debug_overlay,
+            study_result=study_res,
+            study_alert=study_alert_str,
         )
 
         return PipelineFrameOutput(
@@ -395,4 +434,8 @@ class GestureOSEngine:
             mode=self.mode_manager.current_mode_name,
             fps=snapshot.fps,
             dispatched_intent=dispatched_intent,
+            study_active=self.enable_study_guard,
+            study_state=study_st_str,
+            study_alert=study_alert_str,
+            study_result=study_res,
         )

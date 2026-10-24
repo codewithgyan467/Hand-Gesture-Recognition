@@ -177,8 +177,8 @@ class GestureOSMainWindow(QMainWindow):
         self.profile_manager = ProfileManager()
 
         self.setWindowTitle("GestureOS — AI Touchless Mouse")
-        self.resize(1080, 680)
-        self.setMinimumSize(880, 560)
+        self.resize(1140, 720)
+        self.setMinimumSize(920, 580)
         self.setStyleSheet(CLEAN_DARK_THEME)
 
         self._init_ui()
@@ -198,6 +198,22 @@ class GestureOSMainWindow(QMainWindow):
     def _init_shortcuts(self) -> None:
         self.shortcut_toggle = QShortcut(QKeySequence("Ctrl+Space"), self)
         self.shortcut_toggle.activated.connect(self.toggle_active_control)
+
+        # Hotkeys for StudyGuard simulation & meme audio triggers
+        self.shortcut_book = QShortcut(QKeySequence("B"), self)
+        self.shortcut_book.activated.connect(self._trigger_sim_book)
+
+        self.shortcut_close = QShortcut(QKeySequence("C"), self)
+        self.shortcut_close.activated.connect(self._trigger_sim_close_book)
+
+        self.shortcut_phone = QShortcut(QKeySequence("P"), self)
+        self.shortcut_phone.activated.connect(self._trigger_sim_phone)
+
+        self.shortcut_water = QShortcut(QKeySequence("W"), self)
+        self.shortcut_water.activated.connect(self._trigger_sim_water)
+
+        self.shortcut_mute = QShortcut(QKeySequence("M"), self)
+        self.shortcut_mute.activated.connect(self._toggle_study_mute)
 
     def _init_ui(self) -> None:
         central = QWidget()
@@ -255,6 +271,17 @@ class GestureOSMainWindow(QMainWindow):
         self.chk_simple_mode.toggled.connect(self._on_simple_mode_toggled)
         self.chk_simple_mode.setToolTip("Prioritize intuitive 7-gesture vocabulary across all modes")
         header.addWidget(self.chk_simple_mode)
+
+        header.addSpacing(10)
+
+        # StudyGuard AI Meme Monitor ON/OFF Switch
+        self.btn_study_switch = QPushButton("🎯 Study Guard: OFF")
+        self.btn_study_switch.setCheckable(True)
+        self.btn_study_switch.setChecked(self.engine.enable_study_guard)
+        self._update_study_switch_style(self.engine.enable_study_guard)
+        self.btn_study_switch.clicked.connect(self._on_study_guard_toggled)
+        self.btn_study_switch.setToolTip("Toggle Study Guard AI Meme Detector (Book Close, Phone Distraction, Hydration)")
+        header.addWidget(self.btn_study_switch)
 
         header.addSpacing(10)
 
@@ -376,6 +403,78 @@ class GestureOSMainWindow(QMainWindow):
         speed_vbox.addLayout(speed_row)
 
         right_col.addWidget(speed_box)
+
+        # Card 3: Study Guard AI Meme Distraction & Hydration Monitor
+        study_box = QGroupBox("Study Guard — AI Meme Monitor")
+        study_vbox = QVBoxLayout(study_box)
+        study_vbox.setSpacing(8)
+        study_vbox.setContentsMargins(14, 16, 14, 14)
+
+        # Status and Panel Toggle row
+        st_hdr = QHBoxLayout()
+        st_hdr.setSpacing(10)
+        self.lbl_study_status = QLabel("Status: Switched OFF")
+        self.lbl_study_status.setStyleSheet("color: #adb5bd; font-size: 12px; font-weight: 500;")
+        st_hdr.addWidget(self.lbl_study_status, 1)
+
+        self.btn_panel_study_toggle = QPushButton("Turn ON")
+        self.btn_panel_study_toggle.setCheckable(True)
+        self.btn_panel_study_toggle.setChecked(self.engine.enable_study_guard)
+        self.btn_panel_study_toggle.setStyleSheet(
+            "QPushButton { background-color: #0dcaf0; color: #000000; border: none; font-weight: 600; font-size: 11px; padding: 4px 10px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #31d2f2; }"
+        )
+        self.btn_panel_study_toggle.clicked.connect(self._toggle_study_guard_from_panel)
+        st_hdr.addWidget(self.btn_panel_study_toggle)
+        study_vbox.addLayout(st_hdr)
+
+        # Meme rules description
+        rules_lbl = QLabel(
+            "• <b>Close Book</b> ➜ <i>'Kyu nahi ho rahi padhai'</i><br>"
+            "• <b>Phone After Book</b> ➜ <i>'Abeyy padhai likhai karo'</i><br>"
+            "• <b>Drink Water</b> ➜ <i>'Pani pani'</i>"
+        )
+        rules_lbl.setStyleSheet("color: #ced4da; font-size: 11px; line-height: 135%;")
+        rules_lbl.setTextFormat(Qt.RichText)
+        study_vbox.addWidget(rules_lbl)
+
+        # Simulation & test buttons row
+        test_row = QHBoxLayout()
+        test_row.setSpacing(6)
+
+        btn_t_book = QPushButton("📖 Read (B)")
+        btn_t_book.setToolTip("Simulate reading book")
+        btn_t_book.setStyleSheet("QPushButton { font-size: 11px; padding: 4px 6px; }")
+        btn_t_book.clicked.connect(self._trigger_sim_book)
+
+        btn_t_close = QPushButton("📕 Close (C)")
+        btn_t_close.setToolTip("Simulate closing book -> Kyu nahi ho rahi padhai")
+        btn_t_close.setStyleSheet("QPushButton { font-size: 11px; padding: 4px 6px; }")
+        btn_t_close.clicked.connect(self._trigger_sim_close_book)
+
+        btn_t_phone = QPushButton("📱 Phone (P)")
+        btn_t_phone.setToolTip("Simulate phone distraction -> Abeyy padhai likhai karo")
+        btn_t_phone.setStyleSheet("QPushButton { font-size: 11px; padding: 4px 6px; }")
+        btn_t_phone.clicked.connect(self._trigger_sim_phone)
+
+        btn_t_water = QPushButton("💧 Water (W)")
+        btn_t_water.setToolTip("Simulate drinking water -> Pani pani")
+        btn_t_water.setStyleSheet("QPushButton { font-size: 11px; padding: 4px 6px; }")
+        btn_t_water.clicked.connect(self._trigger_sim_water)
+
+        test_row.addWidget(btn_t_book)
+        test_row.addWidget(btn_t_close)
+        test_row.addWidget(btn_t_phone)
+        test_row.addWidget(btn_t_water)
+        study_vbox.addLayout(test_row)
+
+        # Audio mute button row
+        self.btn_study_mute = QPushButton("🔊 Meme Audio: Active (Press M to Mute)")
+        self.btn_study_mute.setStyleSheet("QPushButton { background-color: #212529; color: #ced4da; font-size: 11px; padding: 5px 8px; border: 1px solid #495057; }")
+        self.btn_study_mute.clicked.connect(self._toggle_study_mute)
+        study_vbox.addWidget(self.btn_study_mute)
+
+        right_col.addWidget(study_box)
 
         # Card 3: Quick Status & Recovery Action
         action_box = QGroupBox("Quick Action")
@@ -611,6 +710,76 @@ class GestureOSMainWindow(QMainWindow):
         else:
             self.engine.state_machine.transition_to(GestureState.ACTIVE, "User manual toggle to Active Control")
 
+    def _update_study_switch_style(self, checked: bool) -> None:
+        if checked:
+            self.btn_study_switch.setText("🎯 Study Guard: ON")
+            self.btn_study_switch.setStyleSheet(
+                "QPushButton { background-color: #0dcaf0; color: #000000; border: 1px solid #0dcaf0; "
+                "font-weight: 700; padding: 6px 14px; border-radius: 6px; font-size: 13px; }"
+                "QPushButton:hover { background-color: #31d2f2; border-color: #25cff2; }"
+            )
+            if hasattr(self, "btn_panel_study_toggle"):
+                self.btn_panel_study_toggle.setText("Turn OFF")
+                self.btn_panel_study_toggle.setChecked(True)
+                self.btn_panel_study_toggle.setStyleSheet(
+                    "QPushButton { background-color: #dc3545; color: #ffffff; border: none; font-weight: 600; font-size: 11px; padding: 4px 10px; border-radius: 4px; }"
+                    "QPushButton:hover { background-color: #bb2d3b; }"
+                )
+        else:
+            self.btn_study_switch.setText("🎯 Study Guard: OFF")
+            self.btn_study_switch.setStyleSheet(
+                "QPushButton { background-color: #2b3035; color: #adb5bd; border: 1px solid #495057; "
+                "font-weight: 600; padding: 6px 14px; border-radius: 6px; font-size: 13px; }"
+                "QPushButton:hover { background-color: #343a40; border-color: #6c757d; color: #dee2e6; }"
+            )
+            if hasattr(self, "btn_panel_study_toggle"):
+                self.btn_panel_study_toggle.setText("Turn ON")
+                self.btn_panel_study_toggle.setChecked(False)
+                self.btn_panel_study_toggle.setStyleSheet(
+                    "QPushButton { background-color: #0dcaf0; color: #000000; border: none; font-weight: 600; font-size: 11px; padding: 4px 10px; border-radius: 4px; }"
+                    "QPushButton:hover { background-color: #31d2f2; }"
+                )
+
+    def _on_study_guard_toggled(self, checked: bool) -> None:
+        self.engine.set_study_guard_enabled(checked)
+        self._update_study_switch_style(checked)
+
+    def _toggle_study_guard_from_panel(self) -> None:
+        new_state = not self.engine.enable_study_guard
+        self.btn_study_switch.setChecked(new_state)
+        self._on_study_guard_toggled(new_state)
+
+    def _trigger_sim_book(self) -> None:
+        if not self.engine.enable_study_guard:
+            self.btn_study_switch.setChecked(True)
+            self._on_study_guard_toggled(True)
+        self.engine.study_state_machine.trigger_manual_book_read()
+
+    def _trigger_sim_close_book(self) -> None:
+        if not self.engine.enable_study_guard:
+            self.btn_study_switch.setChecked(True)
+            self._on_study_guard_toggled(True)
+        self.engine.study_state_machine.trigger_manual_book_close()
+
+    def _trigger_sim_phone(self) -> None:
+        if not self.engine.enable_study_guard:
+            self.btn_study_switch.setChecked(True)
+            self._on_study_guard_toggled(True)
+        self.engine.study_state_machine.trigger_manual_phone_distraction()
+
+    def _trigger_sim_water(self) -> None:
+        if not self.engine.enable_study_guard:
+            self.btn_study_switch.setChecked(True)
+            self._on_study_guard_toggled(True)
+        self.engine.study_state_machine.trigger_manual_drinking()
+
+    def _toggle_study_mute(self) -> None:
+        is_muted = self.engine.study_audio_player.toggle_mute()
+        if hasattr(self, "btn_study_mute"):
+            self.btn_study_mute.setText(
+                "🔇 Audio: Muted (Press M to Unmute)" if is_muted else "🔊 Meme Audio: Active (Press M to Mute)"
+            )
+
     def trigger_emergency_stop(self) -> None:
         self.engine.emergency_guard.trigger("Emergency button pressed in UI")
 
@@ -712,6 +881,28 @@ class GestureOSMainWindow(QMainWindow):
                     "background-color: #343a40; color: #adb5bd; border: 1px solid #495057; "
                     "padding: 5px 12px; border-radius: 4px; font-weight: 500; font-size: 12px;"
                 )
+
+            # 5b. Synchronize Study Guard State & Alert Banner in UI
+            if hasattr(self, "lbl_study_status"):
+                if getattr(output, "study_active", False):
+                    st_val = getattr(output, "study_state", "IDLE")
+                    alert = getattr(output, "study_alert", None)
+                    if alert:
+                        self.lbl_study_status.setText(f"🚨 {alert}")
+                        self.lbl_study_status.setStyleSheet("color: #0dcaf0; font-weight: 700; font-size: 11px;")
+                    else:
+                        self.lbl_study_status.setText(f"Status: {st_val}")
+                        self.lbl_study_status.setStyleSheet("color: #20c997; font-weight: 600; font-size: 11px;")
+                else:
+                    self.lbl_study_status.setText("Status: Switched OFF")
+                    self.lbl_study_status.setStyleSheet("color: #adb5bd; font-size: 11px;")
+
+            if hasattr(self, "btn_study_switch"):
+                if self.btn_study_switch.isChecked() != self.engine.enable_study_guard:
+                    self.btn_study_switch.blockSignals(True)
+                    self.btn_study_switch.setChecked(self.engine.enable_study_guard)
+                    self._update_study_switch_style(self.engine.enable_study_guard)
+                    self.btn_study_switch.blockSignals(False)
 
         # 6. Synchronize System Tray State
         if self.tray_icon:

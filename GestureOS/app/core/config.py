@@ -103,6 +103,7 @@ class GestureOSConfig:
     start_minimized_to_tray: bool = False
     launch_on_startup: bool = False
     dark_mode: bool = True
+    enable_study_guard: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
@@ -138,7 +139,7 @@ class GestureOSConfig:
         if "custom_mappings" in data and isinstance(data["custom_mappings"], dict):
             cfg.custom_mappings = data["custom_mappings"]
 
-        for bool_field in ["simple_mode", "show_debug_overlay", "show_hud", "start_minimized_to_tray", "launch_on_startup", "dark_mode"]:
+        for bool_field in ["simple_mode", "show_debug_overlay", "show_hud", "start_minimized_to_tray", "launch_on_startup", "dark_mode", "enable_study_guard"]:
             if bool_field in data:
                 setattr(cfg, bool_field, bool(data[bool_field]))
 

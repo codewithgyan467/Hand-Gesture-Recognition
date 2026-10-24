@@ -169,25 +169,34 @@ StudyGuard is an intelligent focus and hydration supervisor combining MediaPipe 
 | **Phone Used After Book** | Detects cell phone usage following book closure | `E:\Hand Gesture Recognition\meme audios\abeyy-padhai-likhai-karo.mp3` |
 | **Drinking Water** | Detects bottle/cup raised to mouth/face region | `E:\Hand Gesture Recognition\meme audios\pani pani.mp3` |
 
-### Running StudyGuard
+### Unified Single Application Window with ON/OFF Switch
+GestureOS and StudyGuard are seamlessly integrated into a single unified desktop application:
+- **Header Switch (`🎯 Study Guard: ON/OFF`)**: Toggle real-time meme monitoring on and off with a single click in the top navigation bar.
+- **Dedicated Sidebar Card**: View live detection status, trigger audio simulations, or mute meme audio (`M`).
+- **Live Bounding Box HUD**: Overlays detected books, phones, containers (bottles/cups), facial landmarks, and glowing meme alert banners directly onto the camera stream.
+
 ```powershell
-# Launch with live webcam
+# Launch the unified dashboard (Study Guard switch can be toggled in header anytime)
+python run_gestureos.py
+# or double-click START_GESTUREOS.bat
+
+# Launch with Study Guard enabled immediately
 python study_guard.py
 # or double-click START_STUDY_GUARD.bat
 
 # Launch in Simulation Mode (zero webcam required)
-python study_guard.py --simulation
+python run_gestureos.py --simulation --study-guard
 # or double-click START_STUDY_GUARD_SIMULATION.bat
 ```
 
-**Interactive In-App Hotkeys:**
+**Interactive In-App Hotkeys (Active in Dashboard):**
+- `[Ctrl+Space]`: Pause / Resume touchless mouse control
 - `[B]`: Simulate Book Reading
 - `[C]`: Simulate Book Closing (triggers "Kyu nahi ho rahi padhai")
 - `[P]`: Simulate Phone In Use (triggers "Abeyy padhai likhai karo")
 - `[W]`: Simulate Drinking Water (triggers "Pani pani")
 - `[M]`: Toggle Audio Mute
-- `[R]`: Reset Session Stats
-- `[Q]` / `[ESC]`: Quit
+- `[ESC]`: Global Emergency Stop
 
 ---
 
