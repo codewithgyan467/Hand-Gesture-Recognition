@@ -1,0 +1,68 @@
+{
+  "version": "1.0.0",
+  "profile_name": "Gaming",
+  "default_mode": "Mouse",
+  "camera": {
+    "camera_index": 0,
+    "width": 640,
+    "height": 480,
+    "fps": 30,
+    "auto_reconnect": true,
+    "reconnect_interval_sec": 2.0,
+    "mirror": true,
+    "simulation_mode": false
+  },
+  "active_region": {
+    "x_min": 0.15,
+    "y_min": 0.15,
+    "x_max": 0.85,
+    "y_max": 0.85,
+    "dead_zone_radius": 0.003
+  },
+  "cursor": {
+    "smoothing_filter": "one_euro",
+    "smoothing_level": "low",
+    "min_cutoff": 1.0,
+    "beta": 0.007,
+    "d_cutoff": 1.0,
+    "ema_alpha": 0.35,
+    "acceleration": 1.15,
+    "velocity_limit": 140.0,
+    "screen_width": 1920,
+    "screen_height": 1080,
+    "invert_x": true
+  },
+  "pinch": {
+    "pinch_threshold": 0.28,
+    "release_threshold": 0.36,
+    "pinch_hold_time_sec": 0.35,
+    "double_click_window_sec": 0.4,
+    "cooldown_ms": 140
+  },
+  "validation": {
+    "min_confidence": 0.7,
+    "consecutive_frames_required": 3,
+    "activation_hold_sec": 1.0,
+    "allow_gesture_activation": false,
+    "emergency_stop_gesture": "dual_fists",
+    "rate_limit_volume_hz": 15.0,
+    "swipe_min_velocity": 0.45,
+    "swipe_min_distance": 0.12,
+    "wave_oscillations_required": 3
+  },
+  "cooldowns": {
+    "left_click_ms": 220,
+    "right_click_ms": 350,
+    "double_click_ms": 400,
+    "scroll_ms": 30,
+    "swipe_ms": 500,
+    "mode_switch_ms": 800,
+    "system_command_ms": 600
+  },
+  "custom_mappings": {},
+  "show_debug_overlay": true,
+  "show_hud": true,
+  "start_minimized_to_tray": false,
+  "launch_on_startup": false,
+  "dark_mode": true
+}
